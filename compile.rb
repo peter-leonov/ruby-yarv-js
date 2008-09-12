@@ -5,6 +5,7 @@ require 'yaml'
 class Block
   
   @@indent = 2
+  @@space = "  "
   
   def initialize
     @code = ""
@@ -13,11 +14,11 @@ class Block
   end
   
   def warn_op op, str = ""
-    warn "#{"  " * @@indent}#{op.first(5).select{|v|v.class!=Array}}#{str}"
+    warn "#{@@space * @@indent}#{op.first(5).select{|v|v.class!=Array}}#{str}, [#{@s}]"
   end
   
   def warn_str str
-    warn "#{"  " * @@indent}#{str}}"
+    warn "#{@@space * @@indent}#{str}"
   end
   
   def op_trace op
@@ -31,7 +32,7 @@ class Block
   end
   
   def op_putstring op
-    @s << "\"#{op[1]}\""
+    @s << "#{op[1].inspect}"
   end
   
   def op_putobject op
@@ -47,8 +48,21 @@ class Block
     @s << "($local_#{op[1]} = #{last})"
   end
   
+  def op_setdynamic op
+    last = @s.pop
+    @s << "($local_#{op[1]} = #{last})"
+  end
+  
   def op_getlocal op
     @s << "$local_#{op[1]}"
+  end
+  
+  def op_getdynamic op
+    @s << "$local_#{op[1]}" # dynamic
+  end
+  
+  def op_getconstant op
+    @s << "#{op[1]}"
   end
   
   def op_dup op
@@ -61,6 +75,13 @@ class Block
     @s << "#{prev} + #{last}"
   end
   
+  def op_opt_minus op
+    last = @s.pop
+    prev = @s.pop
+    # (...) may be needed
+    @s << "#{prev} - #{last}"
+  end
+  
   def op_opt_mult op
     last = @s.pop
     prev = @s.pop
@@ -69,7 +90,7 @@ class Block
   end
   
   def op_send op
-    
+    name = op[1]
     args = @s.last(op[2])
     op[2].times { @s.pop }
     last = @s.pop
@@ -80,7 +101,13 @@ class Block
       args.unshift code
     end
     
-    @s << "(#{last and "(#{last})."}#{op[1]}(#{args.join(", ")}))"
+    if last
+      call = name == :new ? "#{name} (#{last})" : "(#{last}).#{name}"
+    else
+      call = "#{name}"
+    end
+    
+    @s << "(#{call}(#{args.join(", ")}))"
   end
   
   def op_defineclass op
@@ -94,14 +121,17 @@ class Block
   
   def bakeclosure op
     # SimpleDataFormat
+    warn_str op.inspect
     sdf = op[3]
+    args = sdf[4]
     block = sdf[11]
     warn_op block
     code = Block.new.walk block
-    return "function () { #{code} }"
+    return "function (#{(args[:arg_size]..args[:local_size]).to_a.reverse.map{|v|"$local_#{v}"}.join(', ')}) { #{code} }"
   end
   
   def op_leave op
+    @code << @s.join(', ') + ";"
   end
   
   def op_newline op
@@ -111,11 +141,12 @@ class Block
   
   
   
-  def walk op_set
+  def walk ops
     warn_str "block"
     @@indent += 1
-    op_set.each do |op|
+    ops.each do |op|
       if op.class == Fixnum
+        warn_str 'newline'
         op_newline op
       elsif op.class == Symbol
         # warn "label: #{op}"
@@ -127,7 +158,7 @@ class Block
           warn_op op
           send optype, op
         else
-          warn_op op
+          warn_op op, " UNKNOWN"
           # warn "unknow optype #{optype}"
         end
       end
@@ -155,8 +186,8 @@ OutputCompileOption =
   :stack_caching            =>false,
 }
 
-
-# puts
-Generator.new.start RubyVM::InstructionSequence.compile(IO.read(ARGV[0]), "src", 1) #, OutputCompileOption
+# class Block; def warn_str; end; def warn_op; end ;end
+warn "\n\n\n"
+puts Generator.new.start RubyVM::InstructionSequence.compile(IO.read(ARGV[0]), "src", 1) #, OutputCompileOption
 
 # p iseq.to_a.last.to_yaml

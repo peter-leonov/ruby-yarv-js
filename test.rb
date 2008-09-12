@@ -22,8 +22,25 @@ class EventsProcessor
   
   # b = "555" + 888.toString(16, "777".split(puts)) + 999 * 5
   # b.match('aaa')
+  # a = 555
   
-  3.times { |v| puts v }
+  
+  startTime = Time.new.to_f
+
+  sum = ""
+  50000.times{|e| sum += e.to_s}
+
+  endTime = Time.new.to_f
+  puts (endTime - startTime).to_s + ' sec'
+  
+  
+  # sum = ""
+  # b = Date.new
+  # 50000.times{|v| sum += v.to_s}
+  # # 3.times { |v| puts v+1 }
+  # puts Date.new - b
+  # 
+  # alert 123
   
   # b = a
   # c = 777
