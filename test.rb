@@ -1,5 +1,7 @@
 # require 'barman'
 
+load "lib.js";
+
 class A
 
 class EventsProcessor

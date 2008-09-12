@@ -4,10 +4,20 @@ require 'yaml'
 
 class Block
   
+  @@indent = 2
+  
   def initialize
     @code = ""
     @s = []
     @locals = false
+  end
+  
+  def warn_op op, str = ""
+    warn "#{"  " * @@indent}#{op.first(5).select{|v|v.class!=Array}}#{str}"
+  end
+  
+  def warn_str str
+    warn "#{"  " * @@indent}#{str}}"
   end
   
   def op_trace op
@@ -59,14 +69,17 @@ class Block
   end
   
   def op_send op
-    block = op[3]
-    if block
-      bakeclosure op
-    end
     
     args = @s.last(op[2])
     op[2].times { @s.pop }
     last = @s.pop
+    
+    block = op[3]
+    if block
+      code = bakeclosure op
+      args.unshift code
+    end
+    
     @s << "(#{last and "(#{last})."}#{op[1]}(#{args.join(", ")}))"
   end
   
@@ -83,9 +96,9 @@ class Block
     # SimpleDataFormat
     sdf = op[3]
     block = sdf[11]
-    # puts code.to_yaml
+    warn_op block
     code = Block.new.walk block
-    @code << "function () { #{code} }"
+    return "function () { #{code} }"
   end
   
   def op_leave op
@@ -99,34 +112,36 @@ class Block
   
   
   def walk op_set
+    warn_str "block"
+    @@indent += 1
     op_set.each do |op|
       if op.class == Fixnum
         op_newline op
+      elsif op.class == Symbol
+        # warn "label: #{op}"
       else
         optype = ("op_" + op[0].to_s).to_sym
         
         # p op
         if respond_to? optype
-          warn "    #{op}"
+          warn_op op
           send optype, op
         else
-          warn "unknow optype #{optype}"
+          warn_op op
+          # warn "unknow optype #{optype}"
         end
       end
       
     end
-    warn @code
-    return @code
+    warn_str "#{@code}"
+    @@indent -= 1
+    return @code + "\n"
   end
 end
 
 class Generator
   def start iseq
-    
-    puts "load('r.js');"
-    puts "(function (self) { self.prototype = {}; "
-    puts Block.new.walk iseq.to_a.last
-    puts " return self }) (this) ;"
+    return "(function (self) { self.prototype = {}; " + Block.new.walk(iseq.to_a.last) + " return self }) (this) ;"
   end
 end
 
@@ -141,8 +156,7 @@ OutputCompileOption =
 }
 
 
+# puts
 Generator.new.start RubyVM::InstructionSequence.compile(IO.read(ARGV[0]), "src", 1) #, OutputCompileOption
-
-puts
 
 # p iseq.to_a.last.to_yaml
