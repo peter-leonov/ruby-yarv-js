@@ -1,0 +1,5 @@
+#!/bin/sh
+
+export PATH="/opt/ruby-1.9/bin/:$PATH"
+
+./compile $* 2>/dev/null | js
