@@ -7,10 +7,13 @@ class Block
   @@indent = 2
   @@space = "  "
   
+  @@out_space = '	'
+  @@out_indent = -1
+  
   def initialize
     @code = ""
     @s = []
-    @locals = false
+    @locals = nil
   end
   
   def warn_op op, str = ""
@@ -19,6 +22,14 @@ class Block
   
   def warn_str str
     warn "#{@@space * @@indent}#{str}"
+  end
+  
+  def out_space
+    @@out_space * @@out_indent
+  end
+  
+  def to_local num
+    "$#{num}"
   end
   
   def op_trace op
@@ -41,24 +52,23 @@ class Block
   
   def op_setlocal op
     unless @locals
-      @locals = true
-      @code << "var " + (1..op[1]).map { |v| "$local_#{v}" }.join(', ') + ";"
+      @locals = "var " + (1..op[1]).map { |v| to_local v }.join(', ') + ";"
     end
     last = @s.pop
-    @s << "($local_#{op[1]} = #{last})"
+    @s << "#{to_local op[1]} = #{last}"
   end
   
   def op_setdynamic op
     last = @s.pop
-    @s << "($local_#{op[1]} = #{last})"
+    @s << "#{to_local op[1]} = #{last}"
   end
   
   def op_getlocal op
-    @s << "$local_#{op[1]}"
+    @s << "#{to_local op[1]}"
   end
   
   def op_getdynamic op
-    @s << "$local_#{op[1]}" # dynamic
+    @s << "#{to_local op[1]}" # dynamic
   end
   
   def op_getconstant op
@@ -102,12 +112,15 @@ class Block
     end
     
     if last
-      call = name == :new ? "#{name} (#{last})" : "(#{last}).#{name}"
+      unless last =~ /^[a-zA-Z]\w*$/
+        last = "(#{last})"
+      end
+      call = name == :new ? "new #{last}" : "#{last}.#{name}"
     else
       call = "#{name}"
     end
     
-    @s << "(#{call}(#{args.join(", ")}))"
+    @s << "#{call}(#{args.join(", ")})"
   end
   
   def op_defineclass op
@@ -116,7 +129,7 @@ class Block
     block = sdf[11]
     # puts code.to_yaml
     code = Block.new.walk block
-    @code << "(function (self) { self.prototype = {}; #{code} }) (self.#{op[1]} = function () {}) ;"
+    @code << out_space + "new function () { self = self[#{op[1].to_s.inspect}] = Class.new(#{op[1].to_s.inspect}); #{code} } ();"
   end
   
   def bakeclosure op
@@ -127,15 +140,15 @@ class Block
     block = sdf[11]
     warn_op block
     code = Block.new.walk block
-    return "function (#{(args[:arg_size]..args[:local_size]).to_a.reverse.map{|v|"$local_#{v}"}.join(', ')}) { #{code} }"
+    return "function (#{(args[:arg_size]..args[:local_size]).to_a.reverse.map{|v| to_local v}.join(', ')}) {#{code}}"
   end
   
   def op_leave op
-    @code << @s.join(', ') + ";"
+    @code << out_space + @s.join(', ') + ";"
   end
   
   def op_newline op
-    @code << @s.join(', ') + ";"
+    @code << out_space + (@s.empty? ? "\n" : @s.join(', ') + ";\n")
     @s = []
   end
   
@@ -144,6 +157,7 @@ class Block
   def walk ops
     warn_str "block"
     @@indent += 1
+    @@out_indent += 1
     ops.each do |op|
       if op.class == Fixnum
         warn_str 'newline'
@@ -166,13 +180,15 @@ class Block
     end
     warn_str "#{@code}"
     @@indent -= 1
-    return @code + "\n"
+    @@out_indent -= 1
+    return "#{@locals}\n" + @code.to_s + "\n"
   end
 end
 
 class Generator
   def start iseq
-    return "(function (self) { self.prototype = {}; " + Block.new.walk(iseq.to_a.last) + " return self }) (this) ;"
+    # return "(function (self) { self.prototype = {};\n" + Block.new.walk(iseq.to_a.last) + " return self }) (this) ;"
+    return Block.new.walk(iseq.to_a.last).to_s
   end
 end
 
