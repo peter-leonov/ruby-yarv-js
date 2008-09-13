@@ -1,5 +1,3 @@
-# require 'barman'
-
 load "lib.js";
 
 class A

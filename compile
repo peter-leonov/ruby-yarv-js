@@ -1,6 +1,7 @@
-#!/usr/bin/env ruby
+#!/usr/bin/env ruby-1.9
 
 require 'yaml'
+require 'optparse'
 
 class Block
   
@@ -32,10 +33,14 @@ class Block
     "$#{num}"
   end
   
+  def to_special num
+    "$$#{num}"
+  end
+  
   def op_trace op
   end
   
-  def op_putspecialobject op
+  def op_pop op
   end
   
   def op_putnil op
@@ -47,18 +52,26 @@ class Block
   end
   
   def op_putobject op
-    @s << op[1]
+    val = op[1]
+    @s << val.class == Symbol ? val.to_s : val
+  end
+  
+  def op_putspecialobject op
+    @s << "#{to_special op[1]}"
   end
   
   def op_setlocal op
-    unless @locals
-      @locals = "var " + (1..op[1]).map { |v| to_local v }.join(', ') + ";"
-    end
+    @locals << op[1] #"var " + (1..op[1]).map { |v| to_local v }.join(', ') + ";"
     last = @s.pop
     @s << "#{to_local op[1]} = #{last}"
   end
   
   def op_setdynamic op
+    last = @s.pop
+    @s << "#{op[1]} = #{last}"
+  end
+  
+  def op_setconstant op
     last = @s.pop
     @s << "#{to_local op[1]} = #{last}"
   end
@@ -90,6 +103,13 @@ class Block
     prev = @s.pop
     # (...) may be needed
     @s << "#{prev} - #{last}"
+  end
+  
+  def op_opt_div op
+    last = @s.pop
+    prev = @s.pop
+    # (...) may be needed
+    @s << "#{prev} / #{last}"
   end
   
   def op_opt_mult op
@@ -155,7 +175,7 @@ class Block
   
   
   def walk ops
-    warn_str "block"
+    # warn_str "block"
     @@indent += 1
     @@out_indent += 1
     ops.each do |op|
@@ -192,6 +212,9 @@ class Generator
   end
 end
 
+
+
+
 OutputCompileOption =
 {
   :peephole_optimization    =>true,
@@ -202,8 +225,21 @@ OutputCompileOption =
   :stack_caching            =>false,
 }
 
-# class Block; def warn_str; end; def warn_op; end ;end
-warn "\n\n\n"
-puts Generator.new.start RubyVM::InstructionSequence.compile(IO.read(ARGV[0]), "src", 1) #, OutputCompileOption
+params = ARGV.getopts("wr")
 
-# p iseq.to_a.last.to_yaml
+iseq = RubyVM::InstructionSequence.compile(IO.read(ARGV[0]), "src", 1)#, OutputCompileOption
+
+if params["w"]
+  g = Generator.new
+  unless params["c"]
+    class Block; def warn_str *a; end; end
+  end
+  res = g.start iseq
+  if params["r"]
+    warn "\n\n\n#{res}"
+  end
+else
+  class Block; def warn_str *a; end; def warn_op *a; end; end
+  puts Generator.new.start iseq
+end
+
