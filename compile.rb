@@ -129,7 +129,7 @@ class Block
     block = sdf[11]
     # puts code.to_yaml
     code = Block.new.walk block
-    @code << out_space + "new function () { self = self[#{op[1].to_s.inspect}] = Class.new(#{op[1].to_s.inspect}); #{code} } ();"
+    @code << out_space + "new function () { self = self[#{op[1].to_s.inspect}] = Class.create(#{op[1].to_s.inspect}); #{code} } ();"
   end
   
   def bakeclosure op
