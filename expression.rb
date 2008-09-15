@@ -1,4 +1,3 @@
-load "lib.js";
 
 class Test
   a = 909

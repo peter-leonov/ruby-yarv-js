@@ -1,22 +1,12 @@
-load "lib.js";
 
 class A
-  # BASE = "/" + "opt/"
+  CONST = "/" + "a/"
   class B
-  
-    # module Config
-    #   HOME = BASE + "home/"
-    # end
-    #   
-    # def hello
-    #   puts HOME
-    # end
-    #   
-    # def initialize
-    #   # super
-    #   @a = {}
-    #   @b = {}
-    # end
+    puts CONST
+    puts A::CONST
+    CONST = CONST + "b/"
+    puts CONST
+    puts A::CONST
   end
 end
 
