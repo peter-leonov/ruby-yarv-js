@@ -73,8 +73,13 @@ class Block
   
   def op_setconstant op
     last = @s.pop
-    @s << "#{to_local op[1]} = #{last}"
+    @s = ["#{last}.#{to_local op[1]} = #{@s.join(', ')}"]
   end
+  
+  def op_setinlinecache op
+  end
+  
+  
   
   def op_getlocal op
     @s << "#{to_local op[1]}"
@@ -86,6 +91,9 @@ class Block
   
   def op_getconstant op
     @s << "#{op[1]}"
+  end
+  
+  def op_getinlinecache op
   end
   
   def op_dup op
@@ -180,10 +188,10 @@ class Block
     @@out_indent += 1
     ops.each do |op|
       if op.class == Fixnum
-        warn_str 'newline'
+        warn_op [:newline, op]
         op_newline op
       elsif op.class == Symbol
-        # warn "label: #{op}"
+        warn_op [:label, op]
       else
         optype = ("op_" + op[0].to_s).to_sym
         

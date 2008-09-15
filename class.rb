@@ -1,21 +1,24 @@
 load "lib.js";
 
 class A
-  BASE = "/"
+  # BASE = "/" + "opt/"
   class B
   
-    module Config
-      HOME = BASE + "home/"
-    end
-  
-    def hello
-      puts HOME
-    end
-  
-    def initialize
-      # super
-      @a = {}
-      @b = {}
-    end
+    # module Config
+    #   HOME = BASE + "home/"
+    # end
+    #   
+    # def hello
+    #   puts HOME
+    # end
+    #   
+    # def initialize
+    #   # super
+    #   @a = {}
+    #   @b = {}
+    # end
   end
+end
+
+class C < A
 end
