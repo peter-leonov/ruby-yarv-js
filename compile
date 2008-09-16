@@ -213,11 +213,11 @@ class Block
   end
   
   def op_defineclass op
+    p op
     # SimpleDataFormat
     iseq = op[2]
-    block = iseq[11]
     # puts code.to_yaml
-    code = Block.new.walk block
+    code = Block.new.walk iseq
     parent = @s.pop
     special = @s.pop
     @code << out_space + "self.#{op[1].to_s} = Class.create(#{op[1].to_s.inspect}, #{parent}, #{special}); new function (self) { with (self) { #{code} } } (#{op[1].to_s});"
@@ -229,10 +229,7 @@ class Block
     block = iseq[11]
     call = ""
     # p args
-    Block.new.walk block do |code|
-      call = "function (#{(args[:local_size]-1...args[:arg_size]+args[:local_size]-1).to_a.reverse.map{|v| to_local v}.join(', ')}) {#{code}}"
-    end
-    return call
+    return Block.new.walk iseq
     # return "function (#{args}) {#{code}}"
   end
   
@@ -250,11 +247,9 @@ class Block
   end
   
   
-  
-  def walk ops
-    # warn_str "block"
+  def walk iseq
     @@deep_size += 1
-    ops.each do |op|
+    iseq.last.each do |op|
       if op.class == Fixnum
         warn_op [:newline, op]
         op_newline op
@@ -263,20 +258,20 @@ class Block
       else
         optype = ("op_" + op[0].to_s).to_sym
         
-        # p op
         if respond_to? optype
           warn_op op
           send optype, op
         else
           warn_op op, " UNKNOWN"
-          # warn "unknow optype #{optype}"
         end
       end
     end
-    # warn_str "#{@code}"
+    
     locals = @locals.empty? ? "" : "var #{@locals.uniq.join(', ')};"
     code = locals + "\n" + @code.to_s + "\n"
-    yield code if block_given?
+    
+    args = iseq[4]
+    code = "function (#{(args[:local_size]-1...args[:arg_size]+args[:local_size]-1).to_a.reverse.map{|v| to_local v}.join(', ')}) {#{code}}"
     @@deep_size -= 1
     return code
   end
@@ -285,7 +280,7 @@ end
 class Generator
   def start iseq
     # return "(function (self) { self.prototype = {};\n" + Block.new.walk(iseq.to_a.last) + " return self }) (this) ;"
-    return Block.new.walk(iseq.to_a.last).to_s
+    return Block.new.walk(iseq.to_a).to_s
   end
 end
 
