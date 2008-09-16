@@ -5,11 +5,14 @@ require 'optparse'
 
 class Block
   
-  @@indent = 2
   @@space = "  "
   
   @@out_space = '	'
-  @@out_indent = -1
+  
+  @@js_id_rex = /^[a-zA-Z]\w*$/
+  
+  @@deep_size = 0
+  
   
   def initialize
     @code = ""
@@ -18,23 +21,23 @@ class Block
   end
   
   def warn_op op, str = ""
-    warn "#{@@space * @@indent}#{op.first(5).select{|v|v.class!=Array}}#{str}, [#{@s}]"
+    warn "#{@@space * (@@deep_size + 2)}#{op.first(5).select{|v|v.class!=Array}}#{str}, [#{@s.map{|v|v.to_s[0, 20]}}]"
   end
   
   def warn_str str
-    warn "#{@@space * @@indent}#{str}"
+    warn "#{@@space * (@@deep_size + 2)}#{str}"
   end
   
   def out_space
-    @@out_space * @@out_indent
+    @@out_space * @@deep_size
   end
   
   def to_local num
-    "$#{num}"
+    "$#{@@deep_size}_#{num}"
   end
   
   def to_special num
-    ["!!!", "???", "self"][num]
+    ["!!!", "Class", "self"][num]
   end
   
   def op_trace op
@@ -46,6 +49,10 @@ class Block
   end
   
   
+  def op_putself op
+    @s << "self"
+  end
+  
   def op_putnil op
     @s << "null"
   end
@@ -56,7 +63,13 @@ class Block
   
   def op_putobject op
     val = op[1]
-    @s << (val.class == Symbol ? val.to_s : val)
+    @s << (val.class == Symbol || val.class == String ? val.to_s.inspect : val)
+  end
+  
+  def op_putiseq op
+    iseq = op[1]
+    
+    @s << bakeclosure(iseq)
   end
   
   def op_putspecialobject op
@@ -71,7 +84,7 @@ class Block
   
   def op_setdynamic op
     last = @s.pop
-    @s << "#{to_local op[1]} = #{last}"
+    @s << "$#{@@deep_size - op[2]}_#{op[1]} = #{last}"
   end
   
   def op_setconstant op
@@ -92,7 +105,7 @@ class Block
   end
   
   def op_getdynamic op
-    @s << "#{to_local op[1]}" # dynamic
+    @s << "$#{op[1]}_#{op[2]}" # dynamic
   end
   
   def op_getconstant op
@@ -104,10 +117,22 @@ class Block
     end
   end
   
+  def op_tostring op
+    last = @s.pop
+    @s << "String(#{last})"
+  end
+  
   def op_getinlinecache op
   end
   
   def op_dup op
+  end
+  
+  def op_concatstrings op
+    args = @s.last(op[1])
+    op[1].times { @s.pop }
+    
+    @s << args.join(" + ")
   end
   
   def op_opt_plus op
@@ -145,53 +170,74 @@ class Block
   
   
   def op_send op
-    name = op[1]
-    args = @s.last(op[2])
-    op[2].times { @s.pop }
-    last = @s.pop
+    name = op[1].to_s
+    args_len = op[2]
+    args = @s.last(args_len)
+    args_len.times { @s.pop }
+    this = @s.pop
     
     block = op[3]
     if block
-      code = bakeclosure op
+      code = bakeclosure op[3]
       args.unshift code
     end
     
-    if last && last != "null"
-      unless last =~ /^[a-zA-Z]\w*$/
-        last = "(#{last})"
+    if this && this != "null"
+      unless this =~ @@js_id_rex
+        this = "(#{this})"
       end
-      call = name == :new ? "new #{last}" : "#{last}.#{name}"
+      if name !~ @@js_id_rex
+        name = "[#{name.to_s.inspect}]"
+      elsif name != "new"
+        name = ".#{name}"
+      end
+      
+      call = name == "new" ? "new #{this}" : "#{this}#{name}"
     else
+      unless name =~ @@js_id_rex
+        name = "global[#{name.to_s.inspect}]"
+      end
+      
       call = "#{name}"
     end
     
     @s << "#{call}(#{args.join(", ")})"
   end
   
+  def op_invokesuper op
+    args_len = op[1]
+    args = @s.last(args_len)
+    args_len.times { @s.pop }
+    this = @s.pop
+    @s << "this.super(arguments.callee, [#{args.join(", ")}])"
+  end
+  
   def op_defineclass op
     # SimpleDataFormat
-    sdf = op[2]
-    block = sdf[11]
+    iseq = op[2]
+    block = iseq[11]
     # puts code.to_yaml
     code = Block.new.walk block
     parent = @s.pop
     special = @s.pop
-    @code << out_space + "var #{op[1].to_s} = Class.create(#{op[1].to_s.inspect}, #{parent}, #{special}); new function (self) { with (self) { #{code} } } (#{op[1].to_s});"
+    @code << out_space + "self.#{op[1].to_s} = Class.create(#{op[1].to_s.inspect}, #{parent}, #{special}); new function (self) { with (self) { #{code} } } (#{op[1].to_s});"
   end
   
-  def bakeclosure op
+  def bakeclosure iseq
     # SimpleDataFormat
-    warn_str op.inspect
-    sdf = op[3]
-    args = sdf[4]
-    block = sdf[11]
-    warn_op block
-    code = Block.new.walk block
-    return "function (#{(args[:arg_size]..args[:local_size]).to_a.reverse.map{|v| to_local v}.join(', ')}) {#{code}}"
+    args = iseq[4]
+    block = iseq[11]
+    call = ""
+    # p args
+    Block.new.walk block do |code|
+      call = "function (#{(args[:local_size]-1...args[:arg_size]+args[:local_size]-1).to_a.reverse.map{|v| to_local v}.join(', ')}) {#{code}}"
+    end
+    return call
+    # return "function (#{args}) {#{code}}"
   end
   
   def op_pop op
-    @code << out_space + @s.pop unless @s.empty?
+    @code << out_space + @s.pop.to_s unless @s.empty?
   end
   
   def op_leave op
@@ -207,8 +253,7 @@ class Block
   
   def walk ops
     # warn_str "block"
-    @@indent += 1
-    @@out_indent += 1
+    @@deep_size += 1
     ops.each do |op|
       if op.class == Fixnum
         warn_op [:newline, op]
@@ -227,13 +272,13 @@ class Block
           # warn "unknow optype #{optype}"
         end
       end
-      
     end
-    warn_str "#{@code}"
-    @@indent -= 1
-    @@out_indent -= 1
+    # warn_str "#{@code}"
     locals = @locals.empty? ? "" : "var #{@locals.uniq.join(', ')};"
-    return locals + "\n" + @code.to_s + "\n"
+    code = locals + "\n" + @code.to_s + "\n"
+    yield code if block_given?
+    @@deep_size -= 1
+    return code
   end
 end
 
@@ -260,6 +305,9 @@ OutputCompileOption =
 params = ARGV.getopts("wr")
 
 iseq = RubyVM::InstructionSequence.compile(IO.read(ARGV[0]), "src", 1, OutputCompileOption)#, OutputCompileOption
+
+# puts iseq.to_a.to_yaml
+
 
 if params["w"]
   g = Generator.new
