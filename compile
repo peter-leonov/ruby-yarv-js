@@ -105,7 +105,7 @@ class Block
   end
   
   def op_getdynamic op
-    @s << "$#{op[1]}_#{op[2]}" # dynamic
+    @s << "$#{@@deep_size - op[2]}_#{op[1]}" # dynamic
   end
   
   def op_getconstant op
@@ -213,14 +213,14 @@ class Block
   end
   
   def op_defineclass op
-    p op
+    # p op
     # SimpleDataFormat
     iseq = op[2]
     # puts code.to_yaml
     code = Block.new.walk iseq
     parent = @s.pop
     special = @s.pop
-    @code << out_space + "self.#{op[1].to_s} = Class.create(#{op[1].to_s.inspect}, #{parent}, #{special}); new function (self) { with (self) { #{code} } } (#{op[1].to_s});"
+    @code << out_space + "self.#{op[1].to_s} = Class.create(#{op[1].to_s.inspect}, #{parent}, #{special}); new function (self) { with (self) { (#{code}) () } } (#{op[1].to_s});"
   end
   
   def bakeclosure iseq
@@ -280,7 +280,7 @@ end
 class Generator
   def start iseq
     # return "(function (self) { self.prototype = {};\n" + Block.new.walk(iseq.to_a.last) + " return self }) (this) ;"
-    return Block.new.walk(iseq.to_a).to_s
+    return "(" + Block.new.walk(iseq.to_a).to_s + ") ()"
   end
 end
 
