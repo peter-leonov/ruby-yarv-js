@@ -6,22 +6,28 @@ require 'optparse'
 class Block
   
   @@space = "  "
-  
   @@out_space = '	'
-  
   @@js_id_rex = /^[a-zA-Z]\w*$/
-  
   @@deep_size = 0
+  @@echo_off = {:newline => true, :trace => true}
   
   
   def initialize
     @code = ""
     @s = []
     @locals = []
+    @ops = nil
+    @pos = 0
+  end
+  
+  def history off
+    @ops[@pos+off]
   end
   
   def warn_op op, str = ""
-    warn "#{@@space * (@@deep_size + 2)}#{op.first(5).select{|v|v.class!=Array}}#{str}, [#{@s.map{|v|v.to_s[0, 20]}}]"
+    unless @@echo_off[op[0]]
+      warn "#{@@space * (@@deep_size + 2)}#{op.first(5).select{|v|v.class!=Array}}#{str}, [#{@s.map{|v|v.to_s[0, 20]}}]"
+    end
   end
   
   def warn_str str
@@ -48,6 +54,10 @@ class Block
     @s.empty? ? "" : @s.join(', ') + ";"
   end
   
+  
+  def op_branchunless op
+    puts op
+  end
   
   def op_putself op
     @s << "self"
@@ -249,12 +259,15 @@ class Block
   
   def walk iseq
     @@deep_size += 1
-    iseq.last.each do |op|
+    @ops = iseq.last
+    @ops.each do |op|
+      if op.class == Symbol
+        op = [:label, op]
+      end
+      
       if op.class == Fixnum
         warn_op [:newline, op]
         op_newline op
-      elsif op.class == Symbol
-        warn_op [:label, op]
       else
         optype = ("op_" + op[0].to_s).to_sym
         
@@ -265,6 +278,7 @@ class Block
           warn_op op, " UNKNOWN"
         end
       end
+      @pos += 1
     end
     
     locals = @locals.empty? ? "" : "var #{@locals.uniq.join(', ')};"
