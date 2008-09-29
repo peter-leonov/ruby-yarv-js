@@ -103,7 +103,7 @@ class Block
   end
   
   def op_putstring op
-    push "#{op[1].inspect}"
+    push "#{op[1].to_s.inspect}"
   end
   
   def op_putobject op
@@ -124,12 +124,12 @@ class Block
   def op_setlocal op
     @locals << to_local(op[1])
     last = flush_stack
-    push "#{to_local op[1]} = #{last}"
+    push [to_local(op[1]), "=", last]
   end
   
   def op_setdynamic op
     last = flush_stack
-    push "$#{@@deep_size - op[2]}_#{op[1]} = #{last}"
+    push ["$#{@@deep_size - op[2]}_#{op[1]}", "=", last]
   end
   
   def op_setconstant op
@@ -137,7 +137,7 @@ class Block
     last = flush_stack
     # @locals << op[1]
     # push "#{op[1]} = #{special}.#{op[1]} = #{last}"
-    push "#{special}.#{op[1]} = #{last}"
+    push ["#{special}.#{op[1]}", "=", "#{last}"]
   end
   
   def op_setinlinecache op
@@ -155,7 +155,7 @@ class Block
   end
   
   def op_getlocal op
-    push "#{to_local op[1]}"
+    push to_local(op[1])
   end
   
   def op_getinstancevariable op
@@ -168,7 +168,7 @@ class Block
   end
   
   def op_getdynamic op
-    push "$#{@@deep_size - op[2]}_#{op[1]}" # dynamic
+    push "$#{@@deep_size - op[2]}_#{op[1]}"
   end
   
   def op_getconstant op
@@ -181,7 +181,7 @@ class Block
   end
   
   def op_tostring op
-    last = pop
+    last = flush_stack
     push "String(#{last})"
   end
   
@@ -195,34 +195,36 @@ class Block
     args = []
     op[1].times { args << pop }
     
-    push args.join(" + ")
+    arr = args.map{ |v| [v, "+"] }.flatten
+    arr.pop
+    push arr
   end
   
   def op_opt_aref op
     last = pop
     prev = pop
-    push "#{prev}[#{last}]"
+    push ["(", "#{prev})", "[", last, "]"]
   end
   
   
   def op_opt_tild op
     last = pop
-    push "~(#{last})"
+    push ["~(", last, ")"]
   end
   
   def op_opt_plus_uno op
     last = pop
-    push "+(#{last})"
+    push ["+(", last, ")"]
   end
   
   def op_opt_minus_uno op
     last = pop
-    push "-(#{last})"
+    push ["-(", last, ")"]
   end
   
   def op_opt_not op
     last = pop
-    push "!(#{last})"
+    push ["!(", last, ")"]
   end
   
   def op_opt_and op
