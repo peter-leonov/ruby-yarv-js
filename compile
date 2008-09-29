@@ -3,6 +3,10 @@
 require 'yaml'
 require 'optparse'
 
+class String
+  attr :op_position
+end
+
 class Block
   
   @@space = "  "
@@ -47,7 +51,23 @@ class Block
   end
   
   def op_trace op
-    # @s = []
+    # set []
+  end
+  
+  def empty?
+    @s.empty?
+  end
+  
+  def push str
+    @s << str
+  end
+  
+  def pop
+    @s.pop
+  end
+  
+  def set arr
+    @s = arr
   end
   
   def draw_stack
@@ -56,13 +76,13 @@ class Block
   
   def flush_stack
     res = @s.empty? ? "" : @s.join(', ')
-    @s = []
+    set []
     return res
   end
   
   def op_branchunless op
     @control << "{?#{op[1].to_s.sub(/label_/, "")}}"
-    @s = ["(#{flush_stack})"]
+    set ["if (#{flush_stack})"]
   end
   
   def op_jump op
@@ -75,49 +95,49 @@ class Block
   
   
   def op_putself op
-    @s << "self"
+    push "self"
   end
   
   def op_putnil op
-    @s << "null"
+    push "null"
   end
   
   def op_putstring op
-    @s << "#{op[1].inspect}"
+    push "#{op[1].inspect}"
   end
   
   def op_putobject op
     val = op[1]
-    @s << (val.class == Symbol || val.class == String ? val.to_s.inspect : val)
+    push (val.class == Symbol || val.class == String ? val.to_s.inspect : val)
   end
   
   def op_putiseq op
     iseq = op[1]
     
-    @s << bakeclosure(iseq)
+    push bakeclosure(iseq)
   end
   
   def op_putspecialobject op
-    @s << "#{to_special op[1]}"
+    push "#{to_special op[1]}"
   end
   
   def op_setlocal op
     @locals << to_local(op[1])
     last = flush_stack
-    @s << "#{to_local op[1]} = #{last}"
+    push "#{to_local op[1]} = #{last}"
   end
   
   def op_setdynamic op
     last = flush_stack
-    @s << "$#{@@deep_size - op[2]}_#{op[1]} = #{last}"
+    push "$#{@@deep_size - op[2]}_#{op[1]} = #{last}"
   end
   
   def op_setconstant op
-    special = @s.pop
+    special = pop
     last = flush_stack
     # @locals << op[1]
-    # @s << "#{op[1]} = #{special}.#{op[1]} = #{last}"
-    @s << "#{special}.#{op[1]} = #{last}"
+    # push "#{op[1]} = #{special}.#{op[1]} = #{last}"
+    push "#{special}.#{op[1]} = #{last}"
   end
   
   def op_setinlinecache op
@@ -128,41 +148,41 @@ class Block
   def op_getglobal op
     name = op[1].to_s.gsub(/^@/, "")
     if name.match @@js_id_rex
-      @s << "global.#{name}"
+      push "global.#{name}"
     else
-      @s << "global[#{name.to_s.inspect}]"
+      push "global[#{name.to_s.inspect}]"
     end
   end
   
   def op_getlocal op
-    @s << "#{to_local op[1]}"
+    push "#{to_local op[1]}"
   end
   
   def op_getinstancevariable op
     name = op[1].to_s.gsub(/^@/, "")
     if name.match @@js_id_rex
-      @s << "this.#{name}"
+      push "this.#{name}"
     else
-      @s << "this[#{name.to_s.inspect}]"
+      push "this[#{name.to_s.inspect}]"
     end
   end
   
   def op_getdynamic op
-    @s << "$#{@@deep_size - op[2]}_#{op[1]}" # dynamic
+    push "$#{@@deep_size - op[2]}_#{op[1]}" # dynamic
   end
   
   def op_getconstant op
-    last = @s.pop
+    last = pop
     if last && last != "null"
-      @s << "#{last}.#{op[1]}"
+      push "#{last}.#{op[1]}"
     else
-      @s << "#{op[1]}"
+      push "#{op[1]}"
     end
   end
   
   def op_tostring op
-    last = @s.pop
-    @s << "String(#{last})"
+    last = pop
+    push "String(#{last})"
   end
   
   def op_getinlinecache op
@@ -172,138 +192,138 @@ class Block
   end
   
   def op_concatstrings op
-    args = @s.last(op[1])
-    op[1].times { @s.pop }
+    args = []
+    op[1].times { args << pop }
     
-    @s << args.join(" + ")
+    push args.join(" + ")
   end
   
   def op_opt_aref op
-    last = @s.pop
-    prev = @s.pop
-    @s << "#{prev}[#{last}]"
+    last = pop
+    prev = pop
+    push "#{prev}[#{last}]"
   end
   
   
   def op_opt_tild op
-    last = @s.pop
-    @s << "~(#{last})"
+    last = pop
+    push "~(#{last})"
   end
   
   def op_opt_plus_uno op
-    last = @s.pop
-    @s << "+(#{last})"
+    last = pop
+    push "+(#{last})"
   end
   
   def op_opt_minus_uno op
-    last = @s.pop
-    @s << "-(#{last})"
+    last = pop
+    push "-(#{last})"
   end
   
   def op_opt_not op
-    last = @s.pop
-    @s << "!(#{last})"
+    last = pop
+    push "!(#{last})"
   end
   
   def op_opt_and op
-    last = @s.pop
-    prev = @s.pop
-    @s << "#{prev} & #{last}"
+    last = pop
+    prev = pop
+    push "#{prev} & #{last}"
   end
   
   def op_opt_xor op
-    last = @s.pop
-    prev = @s.pop
-    @s << "#{prev} ^ #{last}"
+    last = pop
+    prev = pop
+    push "#{prev} ^ #{last}"
   end
   
   def op_opt_or op
-    last = @s.pop
-    prev = @s.pop
-    @s << "#{prev} | #{last}"
+    last = pop
+    prev = pop
+    push "#{prev} | #{last}"
   end
   
   def op_opt_ltlt op
-    last = @s.pop
-    prev = @s.pop
-    @s << "#{prev} << #{last}"
+    last = pop
+    prev = pop
+    push "#{prev} << #{last}"
   end
   
   def op_opt_gtgt op
-    last = @s.pop
-    prev = @s.pop
-    @s << "#{prev} >> #{last}"
+    last = pop
+    prev = pop
+    push "#{prev} >> #{last}"
   end
   
   def op_opt_lt op
-    last = @s.pop
-    prev = @s.pop
-    @s << "#{prev} < #{last}"
+    last = pop
+    prev = pop
+    push "#{prev} < #{last}"
   end
   
   def op_opt_le op
-    last = @s.pop
-    prev = @s.pop
-    @s << "#{prev} <= #{last}"
+    last = pop
+    prev = pop
+    push "#{prev} <= #{last}"
   end
   
   def op_opt_eq op
-    last = @s.pop
-    prev = @s.pop
-    @s << "#{prev} == #{last}"
+    last = pop
+    prev = pop
+    push "#{prev} == #{last}"
   end
   
   def op_opt_neq op
-    last = @s.pop
-    prev = @s.pop
-    @s << "#{prev} != #{last}"
+    last = pop
+    prev = pop
+    push "#{prev} != #{last}"
   end
   
   def op_opt_ge op
-    last = @s.pop
-    prev = @s.pop
-    @s << "#{prev} >= #{last}"
+    last = pop
+    prev = pop
+    push "#{prev} >= #{last}"
   end
   
   def op_opt_gt op
-    last = @s.pop
-    prev = @s.pop
-    @s << "#{prev} > #{last}"
+    last = pop
+    prev = pop
+    push "#{prev} > #{last}"
   end
   
   def op_opt_plus op
-    last = @s.pop
-    prev = @s.pop
-    @s << "#{prev} + #{last}"
+    last = pop
+    prev = pop
+    push "#{prev} + #{last}"
   end
   
   def op_opt_minus op
-    last = @s.pop
-    prev = @s.pop
-    @s << "#{prev} - #{last}"
+    last = pop
+    prev = pop
+    push "#{prev} - #{last}"
   end
   
   def op_opt_div op
-    last = @s.pop
-    prev = @s.pop
-    @s << "#{prev} / #{last}"
+    last = pop
+    prev = pop
+    push "#{prev} / #{last}"
   end
   
   def op_opt_mult op
-    last = @s.pop
-    prev = @s.pop
-    @s << "#{prev} * #{last}"
+    last = pop
+    prev = pop
+    push "#{prev} * #{last}"
   end
   
   def op_opt_mod op
-    last = @s.pop
-    prev = @s.pop
-    @s << "#{prev} % #{last}"
+    last = pop
+    prev = pop
+    push "#{prev} % #{last}"
   end
   
   def op_opt_length op
-    last = @s.pop
-    @s << "#{last}.length"
+    last = pop
+    push "#{last}.length"
   end
   
   
@@ -331,9 +351,9 @@ class Block
     end
     
     args_len = op[2]
-    args = @s.last(args_len)
-    args_len.times { @s.pop }
-    this = @s.pop
+    args = []
+    args_len.times { args << pop }
+    this = pop
     
     block = op[3]
     if block
@@ -360,15 +380,15 @@ class Block
       call = "#{name}"
     end
     
-    @s << "#{call}(#{args.join(", ")})"
+    push "#{call}(#{args.join(", ")})"
   end
   
   def op_invokesuper op
     args_len = op[1]
-    args = @s.last(args_len)
-    args_len.times { @s.pop }
-    this = @s.pop
-    @s << "this.super(arguments.callee, [#{args.join(", ")}])"
+    args = []
+    args_len.times { args << pop }
+    this = pop
+    push "this.super(arguments.callee, [#{args.join(", ")}])"
   end
   
   def op_defineclass op
@@ -377,8 +397,8 @@ class Block
     iseq = op[2]
     # puts code.to_yaml
     code = Block.new.walk iseq
-    parent = @s.pop
-    special = @s.pop
+    parent = pop
+    special = pop
     @code << out_space + "self.#{op[1].to_s} = Class.create(#{op[1].to_s.inspect}, #{parent}, #{special}); new function (self) { with (self) { (#{code}) () } } (#{op[1].to_s});"
   end
   
@@ -393,7 +413,7 @@ class Block
   end
   
   def op_pop op
-    @code << out_space + @s.pop.to_s unless @s.empty?
+    @code << out_space + pop.to_s unless empty?
   end
   
   def op_leave op
@@ -416,7 +436,7 @@ class Block
       found = false
       str = str.gsub(/\{\?(\d+)\} \{\>(\d+)\} \{:\2\} \{>(\d+)\} \{:\1\} \{:\3\} /) do |m|
         found = true
-        puts "#{$1} ? #{$2} : #{$3}"
+        puts "if (#{$1}) { #{$2} .. #{$1} } else { #{$1} .. #{$3} }"
         
       end
       # puts "  #{str}"
