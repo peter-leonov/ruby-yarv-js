@@ -1,15 +1,20 @@
 
-a = true
+b = ARGV[0]
+a = true, d
 
-if a
-  puts "true"
-end
+# while true
+#   break
+# end
 
-if a
-  puts "true"
-else
-  puts "false"
-end
+# if a
+#   puts "true"
+# end
+# 
+# if a
+#   puts "true"
+# else
+#   puts "false"
+# end
 
 __END__
 

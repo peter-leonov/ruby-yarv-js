@@ -51,13 +51,19 @@ class Block
   end
   
   def draw_stack
-    @s.empty? ? "" : @s.join(', ') + ";"
+    @s.empty? ? "" : @s.join(', ')
   end
   
+  def flush_stack
+    res = @s.empty? ? "" : @s.join(', ')
+    @s = []
+    return res
+  end
   
   def op_branchunless op
-    puts op
+    @s = ["if (#{@s.join(', ')})"]
   end
+  
   
   def op_putself op
     @s << "self"
@@ -88,18 +94,18 @@ class Block
   
   def op_setlocal op
     @locals << to_local(op[1])
-    last = @s.pop
+    last = flush_stack
     @s << "#{to_local op[1]} = #{last}"
   end
   
   def op_setdynamic op
-    last = @s.pop
+    last = flush_stack
     @s << "$#{@@deep_size - op[2]}_#{op[1]} = #{last}"
   end
   
   def op_setconstant op
     special = @s.pop
-    last = @s.pop
+    last = flush_stack
     # @locals << op[1]
     # @s << "#{op[1]} = #{special}.#{op[1]} = #{last}"
     @s << "#{special}.#{op[1]} = #{last}"
@@ -110,8 +116,26 @@ class Block
   
   
   
+  def op_getglobal op
+    name = op[1].to_s.gsub(/^@/, "")
+    if name.match @@js_id_rex
+      @s << "global.#{name}"
+    else
+      @s << "global[#{name.to_s.inspect}]"
+    end
+  end
+  
   def op_getlocal op
     @s << "#{to_local op[1]}"
+  end
+  
+  def op_getinstancevariable op
+    name = op[1].to_s.gsub(/^@/, "")
+    if name.match @@js_id_rex
+      @s << "this.#{name}"
+    else
+      @s << "this[#{name.to_s.inspect}]"
+    end
   end
   
   def op_getdynamic op
@@ -145,32 +169,127 @@ class Block
     @s << args.join(" + ")
   end
   
+  def op_opt_aref op
+    last = @s.pop
+    prev = @s.pop
+    @s << "#{prev}[#{last}]"
+  end
+  
+  
+  def op_opt_tild op
+    last = @s.pop
+    @s << "~(#{last})"
+  end
+  
+  def op_opt_plus_uno op
+    last = @s.pop
+    @s << "+(#{last})"
+  end
+  
+  def op_opt_minus_uno op
+    last = @s.pop
+    @s << "-(#{last})"
+  end
+  
+  def op_opt_not op
+    last = @s.pop
+    @s << "!(#{last})"
+  end
+  
+  def op_opt_and op
+    last = @s.pop
+    prev = @s.pop
+    @s << "#{prev} & #{last}"
+  end
+  
+  def op_opt_xor op
+    last = @s.pop
+    prev = @s.pop
+    @s << "#{prev} ^ #{last}"
+  end
+  
+  def op_opt_or op
+    last = @s.pop
+    prev = @s.pop
+    @s << "#{prev} | #{last}"
+  end
+  
+  def op_opt_ltlt op
+    last = @s.pop
+    prev = @s.pop
+    @s << "#{prev} << #{last}"
+  end
+  
+  def op_opt_gtgt op
+    last = @s.pop
+    prev = @s.pop
+    @s << "#{prev} >> #{last}"
+  end
+  
+  def op_opt_lt op
+    last = @s.pop
+    prev = @s.pop
+    @s << "#{prev} < #{last}"
+  end
+  
+  def op_opt_le op
+    last = @s.pop
+    prev = @s.pop
+    @s << "#{prev} <= #{last}"
+  end
+  
+  def op_opt_eq op
+    last = @s.pop
+    prev = @s.pop
+    @s << "#{prev} == #{last}"
+  end
+  
+  def op_opt_neq op
+    last = @s.pop
+    prev = @s.pop
+    @s << "#{prev} != #{last}"
+  end
+  
+  def op_opt_ge op
+    last = @s.pop
+    prev = @s.pop
+    @s << "#{prev} >= #{last}"
+  end
+  
+  def op_opt_gt op
+    last = @s.pop
+    prev = @s.pop
+    @s << "#{prev} > #{last}"
+  end
+  
   def op_opt_plus op
     last = @s.pop
     prev = @s.pop
-    # (...) may be needed
     @s << "#{prev} + #{last}"
   end
   
   def op_opt_minus op
     last = @s.pop
     prev = @s.pop
-    # (...) may be needed
     @s << "#{prev} - #{last}"
   end
   
   def op_opt_div op
     last = @s.pop
     prev = @s.pop
-    # (...) may be needed
     @s << "#{prev} / #{last}"
   end
   
   def op_opt_mult op
     last = @s.pop
     prev = @s.pop
-    # (...) may be needed
     @s << "#{prev} * #{last}"
+  end
+  
+  def op_opt_mod op
+    last = @s.pop
+    prev = @s.pop
+    @s << "#{prev} % #{last}"
   end
   
   def op_opt_length op
@@ -181,6 +300,27 @@ class Block
   
   def op_send op
     name = op[1].to_s
+    
+    if name == ">>"
+      return op_opt_gtgt op
+    elsif name == "&"
+      return op_opt_and op
+    elsif name == "|"
+      return op_opt_or op
+    elsif name == "^"
+      return op_opt_xor op
+    elsif name == "-@"
+      return op_opt_minus_uno op
+    elsif name == "+@"
+      return op_opt_plus_uno op
+    elsif name == "~"
+      return op_opt_tild op
+    end
+    
+    if name == "`"
+      name = "system"
+    end
+    
     args_len = op[2]
     args = @s.last(args_len)
     args_len.times { @s.pop }
@@ -248,12 +388,11 @@ class Block
   end
   
   def op_leave op
-    @code << out_space + draw_stack
+    @code << out_space + flush_stack + ";"
   end
   
   def op_newline op
-    @code << out_space + draw_stack + "\n"
-    @s = []
+    @code << out_space + flush_stack + ";\n"
   end
   
   
