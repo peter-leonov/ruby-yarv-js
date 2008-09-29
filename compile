@@ -9,8 +9,7 @@ class Block
   @@out_space = '	'
   @@js_id_rex = /^[a-zA-Z]\w*$/
   @@deep_size = 0
-  @@echo_off = {:newline => true, :trace => true}
-  
+  @@echo_off = {:trace => true, :newline => true}
   
   def initialize
     @code = ""
@@ -18,6 +17,7 @@ class Block
     @locals = []
     @ops = nil
     @pos = 0
+    @control = []
   end
   
   def history off
@@ -47,7 +47,7 @@ class Block
   end
   
   def op_trace op
-    @s = []
+    # @s = []
   end
   
   def draw_stack
@@ -61,7 +61,16 @@ class Block
   end
   
   def op_branchunless op
-    @s = ["if (#{@s.join(', ')})"]
+    @control << "{?#{op[1].to_s.sub(/label_/, "")}}"
+    @s = ["(#{flush_stack})"]
+  end
+  
+  def op_jump op
+    @control << ["{>#{op[1].to_s.sub(/label_/, "")}}"]
+  end
+  
+  def op_label op
+    @control << ["{:#{op[1].to_s.sub(/label_/, "")}}"]
   end
   
   
@@ -396,6 +405,27 @@ class Block
   end
   
   
+  def guess_control
+    puts "\n\n\n---"
+    str = " " + @control.join(' ') + " "
+    
+    puts str
+    
+    found = true
+    while found
+      found = false
+      str = str.gsub(/\{\?(\d+)\} \{\>(\d+)\} \{:\2\} \{>(\d+)\} \{:\1\} \{:\3\} /) do |m|
+        found = true
+        puts "#{$1} ? #{$2} : #{$3}"
+        
+      end
+      # puts "  #{str}"
+    end
+    
+    puts "---"
+  end
+  
+  
   def walk iseq
     @@deep_size += 1
     @ops = iseq.last
@@ -420,11 +450,14 @@ class Block
       @pos += 1
     end
     
+    guess_control
+    
     locals = @locals.empty? ? "" : "var #{@locals.uniq.join(', ')};"
     code = locals + "\n" + @code.to_s + "\n"
     
     args = iseq[4]
     code = "function (#{(args[:local_size]-1...args[:arg_size]+args[:local_size]-1).to_a.reverse.map{|v| to_local v}.join(', ')}) {#{code}}"
+    
     @@deep_size -= 1
     return code
   end

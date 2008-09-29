@@ -1,9 +1,19 @@
 
+a = true
 b = ARGV[0]
-a = true, d
 
-# while true
+# if b
+#   a = b ? 1 : 0
+#   
+#   a = b ? 1 : 0
+# end
+
+if a == b then puts 1 else puts 2 end
+
+
+# while a
 #   break
+#   redo
 # end
 
 # if a
